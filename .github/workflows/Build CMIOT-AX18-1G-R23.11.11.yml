@@ -23,7 +23,7 @@ jobs:
         run: |
           git clone https://github.com/coolsnowwolf/lede lede
           cd lede
-          git checkout R23.11.11
+          git checkout 07c7f456d58a82e923f50e64e546f14b261d3560
 
       - name: Set 1GB RAM in DTS
         run: |
