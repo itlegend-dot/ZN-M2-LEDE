@@ -1,0 +1,123 @@
+name: Build CMIOT-AX18-1G-R23.11.11
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install build-essential clang flex libelf-dev gawk git libncurses-dev libssl-dev \
+          unzip zlib1g-dev lib32gcc-s1 wget curl rsync file subversion qemu-utils time -y
+
+      - name: Clone lede R23.11.11
+        run: |
+          git clone https://github.com/coolsnowwolf/lede lede
+          cd lede
+          git checkout R23.11.11
+
+      - name: Set 1GB RAM in DTS
+        run: |
+          cd lede
+          DTS_FILE="target/linux/ipq60xx/files-5.4/arch/arm64/boot/dts/qcom/ipq6018-cmiot-ax18.dts"
+          sed -i 's/reg = <0x40000000 0x10000000>/reg = <0x40000000 0x40000000>/g' "$DTS_FILE"
+          sed -i 's/0x10000000/0x40000000/g' "$DTS_FILE"
+
+      - name: Write feeds.conf.default
+        run: |
+          cd lede
+          cat > feeds.conf.default <<EOF
+          src-git packages https://github.com/coolsnowwolf/packages.git^19180762e5c1d15cac0e1445a4a7f17d9a7e4d34
+          src-git luci https://github.com/coolsnowwolf/luci.git^16572f1395f02843e5e590870a183780d7f5fc45
+          src-git routing https://github.com/coolsnowwolf/routing.git^9721d428985699ad442c3f712b9a70a4ef96d7fa
+          src-git telephony https://github.com/coolsnowwolf/telephony.git^584d96c22ee8c8f100235517171c7a17711c6f27
+          EOF
+
+      - name: Update feeds
+        run: |
+          cd lede
+          ./scripts/feeds clean
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Write final .config (AX18 1GB NoWiFi NoNSS)
+        run: |
+          cd lede
+          cat > .config <<EOF
+          CONFIG_TARGET_ipq60xx=y
+          CONFIG_TARGET_ipq60xx_generic=y
+          CONFIG_TARGET_ipq60xx_generic_DEVICE_cmiot_ax18=y
+          CONFIG_OPTIMIZE_FOR_SIZE=y
+
+          # Disable WiFi
+          CONFIG_PACKAGE_kmod-ath=n
+          CONFIG_PACKAGE_kmod-ath10k=n
+          CONFIG_PACKAGE_kmod-ath11k=n
+          CONFIG_PACKAGE_kmod-qca-wifi=n
+          CONFIG_PACKAGE_kmod-qca-wifi-akm=n
+          CONFIG_PACKAGE_hostapd-common=n
+          CONFIG_PACKAGE_wpad-basic=n
+          CONFIG_PACKAGE_iw=n
+          CONFIG_PACKAGE_iwinfo=n
+
+          # Disable NSS
+          CONFIG_PACKAGE_kmod-qca-nss-drv=n
+          CONFIG_PACKAGE_kmod-qca-nss-ecm=n
+          CONFIG_PACKAGE_kmod-qca-nss-gmac=n
+          CONFIG_PACKAGE_kmod-qca-nss-clients=n
+
+          # Fix broken engines
+          CONFIG_PACKAGE_libopenssl-afalg-engine=n
+          CONFIG_PACKAGE_libopenssl-gost-engine=n
+          CONFIG_PACKAGE_libopenssl-devcrypto-engine=n
+
+          # LuCI
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-mod-admin-full=y
+          CONFIG_PACKAGE_luci-theme-bootstrap=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-app-opkg=y
+
+          # Tools
+          CONFIG_PACKAGE_htop=y
+          CONFIG_PACKAGE_nano=y
+          CONFIG_PACKAGE_curl=y
+          CONFIG_PACKAGE_wget-ssl=y
+          CONFIG_PACKAGE_ip-full=y
+
+          # Images
+          CONFIG_TARGET_ROOTFS_SQUASHFS=y
+          CONFIG_TARGET_IMAGES_GZIP=y
+          EOF
+
+      - name: Make defconfig
+        run: |
+          cd lede
+          make defconfig
+
+      - name: Download dependencies
+        run: |
+          cd lede
+          make download -j8
+
+      - name: Compile firmware
+        run: |
+          cd lede
+          make V=s -j1
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-cmiot-ax18-1g
+          path: |
+            lede/bin/targets/ipq60xx/generic/*.bin
+            lede/bin/targets/ipq60xx/generic/*.img.gz
