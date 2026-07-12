@@ -25,13 +25,6 @@ jobs:
           cd lede
           git checkout 07c7f456d58a82e923f50e64e546f14b261d3560
 
-      - name: Set 1GB RAM in DTS
-        run: |
-          cd lede
-          DTS_FILE="target/linux/ipq60xx/files-5.4/arch/arm64/boot/dts/qcom/ipq6018-cmiot-ax18.dts"
-          sed -i 's/reg = <0x40000000 0x10000000>/reg = <0x40000000 0x40000000>/g' "$DTS_FILE"
-          sed -i 's/0x10000000/0x40000000/g' "$DTS_FILE"
-
       - name: Write feeds.conf.default
         run: |
           cd lede
